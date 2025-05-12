@@ -1,14 +1,17 @@
-# predict.py
 import onnxruntime as ort
 import numpy as np
 import requests
 from PIL import Image
 import io
 import os
- 
-ONNX_PATH = "model/pokemon_cnn.onnx"
-LABELS_PATH = "model/labels.txt"
-SAVE_PATH = "data/commands/pokemon/images"
+
+# Use the submodule's base path
+SUBMODULE_PATH = os.path.dirname(os.path.realpath(__file__))  # Path where this script is located
+
+# Updated paths to be relative to the submodule
+ONNX_PATH = os.path.join(SUBMODULE_PATH, "model/pokemon_cnn.onnx")
+LABELS_PATH = os.path.join(SUBMODULE_PATH, "model/labels.txt")
+SAVE_PATH = os.path.join(SUBMODULE_PATH, "data/commands/pokemon/images")
 
 class Prediction:
     def __init__(self, onnx_path=ONNX_PATH, labels_path=LABELS_PATH, save_path=SAVE_PATH):
