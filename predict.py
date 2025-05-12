@@ -5,7 +5,7 @@ import requests
 from PIL import Image
 import io
 import os
-
+ 
 ONNX_PATH = "model/pokemon_cnn.onnx"
 LABELS_PATH = "model/labels.txt"
 SAVE_PATH = "data/commands/pokemon/images"
