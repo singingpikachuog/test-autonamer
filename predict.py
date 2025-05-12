@@ -1,74 +1,89 @@
-import onnx
-import onnxruntime  
+# predict.py
+import onnxruntime as ort
 import numpy as np
-import cv2
-from PIL import Image
 import requests
+from PIL import Image
+import io
+import os
 
+ONNX_PATH = "model/pokemon_cnn.onnx"
+LABELS_PATH = "model/labels.txt"
+SAVE_PATH = "data/commands/pokemon/images"
 
-MODEL_PATH = "model/pokemon_cnn.onnx"
+class Prediction:
+    def __init__(self, onnx_path=ONNX_PATH, labels_path=LABELS_PATH, save_path=SAVE_PATH):
+        self.onnx_path = onnx_path
+        self.labels_path = labels_path
+        self.save_path = save_path
+        self.class_names = self.load_class_names()
+        self.ort_session = ort.InferenceSession(self.onnx_path)
 
-class PokeNet:
-    def __init__(self, model_path=MODEL_PATH):
-        # Load ONNX model
-        self.model = onnx.load(model_path)
-        self.input_name = self.model.graph.input[0].name
-        self.output_name = self.model.graph.output[0].name
-        print("Model loaded successfully!")
+    def generate_labels_file_from_save_path(self):
+        if not os.path.exists(self.save_path):
+            raise FileNotFoundError(f"SAVE_PATH does not exist: {self.save_path}")
+        
+        class_names = sorted([
+            d for d in os.listdir(self.save_path)
+            if os.path.isdir(os.path.join(self.save_path, d))
+        ])
 
-    def transform_image(self, img):
-        # Resize and normalize image
-        img = cv2.resize(img, (224, 224))  # Resize image to 224x224
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Convert BGR to RGB
-        img = img.astype(np.float32) / 255.0  # Normalize image to [0, 1]
-        img = np.transpose(img, (2, 0, 1))  # Convert to CHW format
-        img = np.expand_dims(img, axis=0)  # Add batch dimension
-        return img
+        os.makedirs(os.path.dirname(self.labels_path), exist_ok=True)
+        with open(self.labels_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(class_names))
 
-    def predict_url(self, url):
+        return class_names
+
+    def load_class_names(self):
+        if not os.path.exists(self.labels_path):
+            return self.generate_labels_file_from_save_path()
+
+        with open(self.labels_path, "r", encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip()]
+
+    def preprocess_image_from_url(self, url):
         try:
-            print(f"Fetching image from URL... {url}")
-            r = requests.get(url, timeout=10)
-            img_arr = np.frombuffer(r.content, np.uint8)
-            img = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
-            if img is None: return None, 0.0
-
-            # Preprocess image
-            img = self.transform_image(img)
-
-            # Run inference using ONNX
-            session = onnxruntime.InferenceSession(self.model)
-            inputs = {self.input_name: img}
-            outputs = session.run([self.output_name], inputs)
-            logits = outputs[0]
-
-            # Get top class prediction
-            top_idx = np.argmax(logits)
-            top_prob = np.max(logits)
-
-            return f"Pokemon {top_idx}", round(top_prob * 100, 2)
-
+            response = requests.get(url)
+            image = Image.open(io.BytesIO(response.content)).convert("RGB")
         except Exception as e:
-            print(f"Error during prediction: {str(e)}")
-            return None, 0.0
+            raise ValueError(f"Failed to load image from URL: {e}")
+
+        image = image.resize((224, 224))
+        image = np.array(image).astype(np.float32) / 255.0
+        image = (image - [0.485, 0.456, 0.406]) / [0.229, 0.224, 0.225]
+        image = np.transpose(image, (2, 0, 1))  # CHW
+        image = np.expand_dims(image, axis=0).astype(np.float32)  # NCHW
+        return image
+
+    def softmax(self, x):
+        e_x = np.exp(x - np.max(x))
+        return e_x / e_x.sum()
+
+    def predict(self, url):
+        image = self.preprocess_image_from_url(url)
+        inputs = {self.ort_session.get_inputs()[0].name: image}
+        outputs = self.ort_session.run(None, inputs)
+        logits = outputs[0][0]
+        pred_idx = int(np.argmax(logits))
+        prob = float(np.max(self.softmax(logits)))
+        name = self.class_names[pred_idx] if pred_idx < len(self.class_names) else f"unknown_{pred_idx}"
+        return name, f"{prob * 100:.2f}%"
+
+def main():
+    try:
+        predictor = Prediction()
+    except Exception as e:
+        print(f"Initialization error: {e}")
+        return
+
+    while True:
+        url = input("Enter Pokémon image URL (or 'q' to quit): ").strip()
+        if url.lower() == 'q':
+            break
+        try:
+            name, confidence = predictor.predict(url)
+            print(f"Predicted Pokémon: {name} (confidence: {confidence})")
+        except Exception as e:
+            print(f"Error: {e}")
 
 if __name__ == "__main__":
-    print("Pokemon CNN Classifier")
-    print("=" * 40)
-
-    print("\nInitializing model...")
-    try:
-        net = PokeNet()
-        print("\nModel ready! Enter image URLs to classify Pokemon.")
-        
-        while True:
-            url = input("\nPaste image URL (or 'q' to quit): ").strip()
-            if url.lower() == 'q': break
-            print("Processing...")
-            name, acc = net.predict_url(url)
-            if name: print(f"🎯 Result: {name} ({acc}% confidence)")
-            else: print("❌ Could not identify Pokemon.")
-    except KeyboardInterrupt:
-        print("\nExiting program...")
-    except Exception as e:
-        print(f"An error occurred: {str(e)}")
+    main()
