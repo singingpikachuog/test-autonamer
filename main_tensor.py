@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 SOURCE_IMAGE_PATH = "data/commands/pokemon/pokemon_images"
 SAVE_PATH = "data/commands/pokemon/images"
-MODEL_PATH = "pokemon_cnn.pt"
+MODEL_PATH = "model/pokemon_cnn.pt"
 
 os.makedirs(SAVE_PATH, exist_ok=True)
 
