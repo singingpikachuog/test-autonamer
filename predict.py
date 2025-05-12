@@ -5,10 +5,8 @@ from PIL import Image
 import io
 import os
 
-# Use the submodule's base path
-SUBMODULE_PATH = os.path.dirname(os.path.realpath(__file__))  # Path where this script is located
+SUBMODULE_PATH = os.path.dirname(os.path.realpath(__file__))  
 
-# Updated paths to be relative to the submodule
 ONNX_PATH = os.path.join(SUBMODULE_PATH, "model/pokemon_cnn.onnx")
 LABELS_PATH = os.path.join(SUBMODULE_PATH, "model/labels.txt")
 SAVE_PATH = os.path.join(SUBMODULE_PATH, "data/commands/pokemon/images")
